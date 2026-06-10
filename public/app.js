@@ -37,6 +37,14 @@ const api = {
     const res = await fetch(`${API_BASE}/api/plants/${id}/fertilize`, { method: 'POST' });
     return res.json();
   },
+  async backfillCare(id, data) {
+    const res = await fetch(`${API_BASE}/api/plants/${id}/backfill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return res.json();
+  },
   async getPhotos(plantId) {
     const res = await fetch(`${API_BASE}/api/plants/${plantId}/photos`);
     return res.json();
@@ -524,12 +532,19 @@ const PlantManagement = {
     const searchKeyword = ref('');
     const dialogVisible = ref(false);
     const photoDialogVisible = ref(false);
+    const backfillDialogVisible = ref(false);
     const currentPlant = ref(null);
     const plantPhotos = ref([]);
     const isEdit = ref(false);
     const uploadFile = ref(null);
     const photoNote = ref('');
     const photoLoading = ref(false);
+    const backfillLoading = ref(false);
+
+    const backfillForm = reactive({
+      type: 'watering',
+      date: ''
+    });
 
     const formData = reactive({
       name: '',
@@ -689,6 +704,43 @@ const PlantManagement = {
       }
     };
 
+    const openBackfillDialog = (plant) => {
+      currentPlant.value = plant;
+      backfillForm.type = 'watering';
+      backfillForm.date = new Date().toISOString().split('T')[0];
+      backfillDialogVisible.value = true;
+    };
+
+    const handleBackfillSubmit = async () => {
+      if (!backfillForm.date) {
+        ElMessage.warning('请选择补录日期');
+        return;
+      }
+      const selectedDate = new Date(backfillForm.date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate > today) {
+        ElMessage.warning('补录日期不能晚于今天');
+        return;
+      }
+      try {
+        backfillLoading.value = true;
+        await api.backfillCare(currentPlant.value.id, {
+          type: backfillForm.type,
+          date: backfillForm.date
+        });
+        const typeText = backfillForm.type === 'watering' ? '浇水' : '施肥';
+        ElMessage.success(`已补录 ${currentPlant.value.name} 的${typeText}记录`);
+        backfillDialogVisible.value = false;
+        loadPlants();
+        emit('refresh-notifications');
+      } catch (e) {
+        ElMessage.error('补录失败');
+      } finally {
+        backfillLoading.value = false;
+      }
+    };
+
     const getPlantStatus = (plant) => {
       const daysToWater = getDaysDiff(plant.nextWatering);
       const daysToFertilize = getDaysDiff(plant.nextFertilizing);
@@ -777,8 +829,10 @@ const PlantManagement = {
       searchKeyword,
       dialogVisible,
       photoDialogVisible,
+      backfillDialogVisible,
       currentPlant,
       formData,
+      backfillForm,
       rules,
       isEdit,
       filteredPlants,
@@ -786,6 +840,7 @@ const PlantManagement = {
       uploadFile,
       photoNote,
       photoLoading,
+      backfillLoading,
       difficultyOptions,
       lightOptions,
       humidityOptions,
@@ -797,6 +852,8 @@ const PlantManagement = {
       handleDelete,
       handleWater,
       handleFertilize,
+      openBackfillDialog,
+      handleBackfillSubmit,
       getPlantStatus,
       getStatusText,
       getDifficultyLabel,
@@ -882,6 +939,7 @@ const PlantManagement = {
                       <el-dropdown-menu>
                         <el-dropdown-item @click="openEditDialog(plant)">✏️ 编辑</el-dropdown-item>
                         <el-dropdown-item @click="openPhotoDialog(plant)">📷 照片</el-dropdown-item>
+                        <el-dropdown-item @click="openBackfillDialog(plant)">📝 补录记录</el-dropdown-item>
                         <el-dropdown-item divided @click="handleDelete(plant)" style="color: #f44336;">🗑️ 删除</el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
@@ -974,6 +1032,45 @@ const PlantManagement = {
         <template #footer>
           <el-button @click="dialogVisible = false">取消</el-button>
           <el-button type="primary" @click="handleSubmit($refs.formRef)">保存</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog v-model="backfillDialogVisible" title="补录养护记录" width="500px">
+        <el-form label-width="100px">
+          <el-form-item label="植物名称">
+            <span>{{ currentPlant?.name }}</span>
+          </el-form-item>
+          <el-form-item label="养护类型">
+            <el-radio-group v-model="backfillForm.type">
+              <el-radio-button value="watering">💧 浇水</el-radio-button>
+              <el-radio-button value="fertilizing">🌾 施肥</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="补录日期">
+            <el-date-picker
+              v-model="backfillForm.date"
+              type="date"
+              placeholder="选择补录日期"
+              :disabled-date="(date) => date > new Date()"
+              style="width: 100%;"
+            />
+          </el-form-item>
+          <el-alert
+            title="补录说明"
+            type="info"
+            :closable="false"
+            style="margin-top: 10px;"
+          >
+            <template #default>
+              补录记录将按所选日期保存。如果补录日期晚于当前记录的最后养护时间，下次养护时间将自动重算。
+            </template>
+          </el-alert>
+        </el-form>
+        <template #footer>
+          <el-button @click="backfillDialogVisible = false">取消</el-button>
+          <el-button type="primary" :loading="backfillLoading" @click="handleBackfillSubmit">
+            确认补录
+          </el-button>
         </template>
       </el-dialog>
 

@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 3041;
 
 app.use(cors());
 app.use(bodyParser.json());
@@ -241,6 +241,58 @@ app.post('/api/plants/:id/fertilize', (req, res) => {
     type: 'fertilizing',
     date: now,
     completed: true
+  });
+  writeJSON('care-records.json', careRecords);
+  
+  const nextCare = calculateNextCare(plants[index]);
+  res.json({ ...plants[index], ...nextCare });
+});
+
+app.post('/api/plants/:id/backfill', (req, res) => {
+  const { type, date } = req.body;
+  
+  if (!type || !date) {
+    return res.status(400).json({ error: '请提供养护类型和日期' });
+  }
+  
+  if (type !== 'watering' && type !== 'fertilizing') {
+    return res.status(400).json({ error: '养护类型不正确' });
+  }
+  
+  const backfillDate = new Date(date);
+  if (isNaN(backfillDate.getTime())) {
+    return res.status(400).json({ error: '日期格式不正确' });
+  }
+  
+  const plants = readJSON('plants.json');
+  const index = plants.findIndex(p => p.id === req.params.id);
+  if (index === -1) {
+    return res.status(404).json({ error: '植物不存在' });
+  }
+  
+  const backfillISO = backfillDate.toISOString();
+  const currentLast = type === 'watering' 
+    ? (plants[index].lastWatering ? new Date(plants[index].lastWatering) : null)
+    : (plants[index].lastFertilizing ? new Date(plants[index].lastFertilizing) : null);
+  
+  if (!currentLast || backfillDate > currentLast) {
+    if (type === 'watering') {
+      plants[index].lastWatering = backfillISO;
+    } else {
+      plants[index].lastFertilizing = backfillISO;
+    }
+    plants[index].status = 'healthy';
+    writeJSON('plants.json', plants);
+  }
+  
+  const careRecords = readJSON('care-records.json');
+  careRecords.push({
+    id: generateId(),
+    plantId: req.params.id,
+    type: type,
+    date: backfillISO,
+    completed: true,
+    backfilled: true
   });
   writeJSON('care-records.json', careRecords);
   
