@@ -45,11 +45,15 @@ const generateId = () => Date.now().toString(36) + Math.random().toString(36).su
 
 const calculateNextCare = (plant) => {
   const now = new Date();
-  const lastWatering = plant.lastWatering ? new Date(plant.lastWatering) : now;
-  const lastFertilizing = plant.lastFertilizing ? new Date(plant.lastFertilizing) : now;
+  const lastWatering = plant.lastWatering ? new Date(plant.lastWatering) : null;
+  const lastFertilizing = plant.lastFertilizing ? new Date(plant.lastFertilizing) : null;
   
-  const nextWatering = new Date(lastWatering.getTime() + plant.wateringCycle * 24 * 60 * 60 * 1000);
-  const nextFertilizing = new Date(lastFertilizing.getTime() + plant.fertilizingCycle * 24 * 60 * 60 * 1000);
+  const nextWatering = lastWatering
+    ? new Date(lastWatering.getTime() + plant.wateringCycle * 24 * 60 * 60 * 1000)
+    : now;
+  const nextFertilizing = lastFertilizing
+    ? new Date(lastFertilizing.getTime() + plant.fertilizingCycle * 24 * 60 * 60 * 1000)
+    : now;
   
   return {
     nextWatering: nextWatering.toISOString(),
@@ -264,10 +268,29 @@ app.post('/api/plants/:id/backfill', (req, res) => {
     return res.status(400).json({ error: '日期格式不正确' });
   }
   
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const backfillDay = new Date(backfillDate);
+  backfillDay.setHours(0, 0, 0, 0);
+  if (backfillDay > today) {
+    return res.status(400).json({ error: '补录日期不能晚于今天' });
+  }
+  
   const plants = readJSON('plants.json');
   const index = plants.findIndex(p => p.id === req.params.id);
   if (index === -1) {
     return res.status(404).json({ error: '植物不存在' });
+  }
+  
+  const careRecords = readJSON('care-records.json');
+  const backfillDayStr = backfillDate.toISOString().split('T')[0];
+  const duplicate = careRecords.find(r =>
+    r.plantId === req.params.id &&
+    r.type === type &&
+    r.date.split('T')[0] === backfillDayStr
+  );
+  if (duplicate) {
+    return res.status(400).json({ error: '该日期已有相同类型的养护记录' });
   }
   
   const backfillISO = backfillDate.toISOString();
@@ -285,7 +308,6 @@ app.post('/api/plants/:id/backfill', (req, res) => {
     writeJSON('plants.json', plants);
   }
   
-  const careRecords = readJSON('care-records.json');
   careRecords.push({
     id: generateId(),
     plantId: req.params.id,

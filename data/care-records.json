@@ -1,18 +1,1 @@
-[
-  {
-    "id": "mq7snph70frh6ftm02lu",
-    "plantId": "mpz7eygmyvpbpc7m9v",
-    "type": "watering",
-    "date": "2026-06-08T00:00:00.000Z",
-    "completed": true,
-    "backfilled": true
-  },
-  {
-    "id": "mq7splibbui68sb384f",
-    "plantId": "mpz7eygmyvpbpc7m9v",
-    "type": "watering",
-    "date": "2026-06-02T00:00:00.000Z",
-    "completed": true,
-    "backfilled": true
-  }
-]
+[]

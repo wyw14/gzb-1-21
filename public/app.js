@@ -719,16 +719,26 @@ const PlantManagement = {
       const selectedDate = new Date(backfillForm.date);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      if (selectedDate > today) {
+      const selectedDay = new Date(selectedDate);
+      selectedDay.setHours(0, 0, 0, 0);
+      if (selectedDay > today) {
         ElMessage.warning('补录日期不能晚于今天');
         return;
       }
       try {
         backfillLoading.value = true;
-        await api.backfillCare(currentPlant.value.id, {
+        const year = selectedDate.getFullYear();
+        const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(selectedDate.getDate()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}`;
+        const res = await api.backfillCare(currentPlant.value.id, {
           type: backfillForm.type,
-          date: backfillForm.date
+          date: dateStr
         });
+        if (res.error) {
+          ElMessage.error(res.error);
+          return;
+        }
         const typeText = backfillForm.type === 'watering' ? '浇水' : '施肥';
         ElMessage.success(`已补录 ${currentPlant.value.name} 的${typeText}记录`);
         backfillDialogVisible.value = false;
